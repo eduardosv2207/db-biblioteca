@@ -72,68 +72,73 @@ INSERT INTO itens_emprestimo
 (3, 3, 1, 4.00),
 (4, 2, 2, 3.00); 
 ------------------------------------------------------------------------------------------
---Q1
-	create VIEW vw_acervo_ordenado as
-	select
-		l.titulo,
-		l.isbn,
-		c.nome as categoria,
-		l.taxa_diaria
+-- Q1
 
-	from livros l
-	join categorias c on l.categoria_id = c.id
+CREATE OR REPLACE VIEW vw_acervo_ordenado AS
+SELECT livros.titulo,
+       livros.isbn,
+       categorias.nome AS categoria,
+       livros.taxa_diaria
+FROM livros
+LEFT JOIN categorias ON livros.categoria_id = categorias.id
+ORDER BY livros.taxa_diaria DESC;
 
-	order by l.taxa_diaria DESC
 
 -- Q2
-	CREATE VIEW vw_emprestimos_carlos as
-	select 
-		leitores.nome,
-		e.id as id_emprestimo,
-		e.data_emprestimo,
-		l.titulo,
-		ie.quantidade,
-		e.status 
-	from
-		itens_emprestimo ie
-	join emprestimos e on ie.emprestimo_id = e.id
-	join livros l ON ie.livro_id = l.id
-	join leitores on e.leitor_id = leitores.id
-	WHERE leitores.nome = 'Carlos Silva'
+
+CREATE OR REPLACE VIEW vw_emprestimos_carlos AS
+SELECT emprestimos.id AS id_emprestimo,
+       emprestimos.data_emprestimo,
+       livros.titulo,
+       itens_emprestimo.quantidade,
+       emprestimos.status
+FROM emprestimos
+JOIN leitores ON emprestimos.leitor_id = leitores.id
+LEFT JOIN itens_emprestimo
+    ON itens_emprestimo.emprestimo_id = emprestimos.id
+LEFT JOIN livros ON itens_emprestimo.livro_id = livros.id
+WHERE leitores.nome = 'Carlos Silva';
 
 
 -- Q3
-	CREATE VIEW vw_total_emprestimos as
-	select
-		e.id as id_emprestimo,
-		l.nome as leitor,
-	    sum(ie.quantidade * livros.taxa_diaria) as valor_total
-	from
-		itens_emprestimo ie
-	join emprestimos e on ie.emprestimo_id = e.id
-	join livros on ie.livro_id = livros.id
-	join leitores l on e.leitor_id = l.id
-	group by id_emprestimo, l.nome
 
---Q4
-	select
-	livros.titulo as nome_livro
-	from
-		livros,
-		categorias
-	WHERE
-		categorias.nome = 'Ficção' AND
-		livros.taxa_diaria > 5 and
-		livros.disponivel = TRUE
+CREATE OR REPLACE VIEW vw_total_emprestimos AS
+SELECT emprestimos.id AS id_emprestimo,
+       leitores.nome AS leitor,
+       COALESCE(
+           SUM(itens_emprestimo.quantidade *
+               itens_emprestimo.valor_diaria), 0
+       ) AS valor_total
+FROM emprestimos
+LEFT JOIN leitores ON emprestimos.leitor_id = leitores.id
+LEFT JOIN itens_emprestimo
+    ON itens_emprestimo.emprestimo_id = emprestimos.id
+GROUP BY emprestimos.id, leitores.nome;
 
---Q5
-	create VIEW vw_faturamento_por_categoria AS
-	SELECT
-		c.nome AS categoria,
-		SUM(ie.quantidade * ie.valor_diaria) AS total_arrecadado
-	FROM livros l
-	JOIN categorias c ON l.categoria_id = c.id
-	JOIN itens_emprestimo ie ON ie.livro_id = l.id
-	JOIN emprestimos e ON ie.emprestimo_id = e.id
-	WHERE e.status = 'Devolvido'
-	GROUP BY c.nome
+
+-- Q4
+
+SELECT livros.titulo,
+       livros.isbn,
+       categorias.nome AS categoria,
+       livros.taxa_diaria,
+       livros.disponivel
+FROM livros
+JOIN categorias ON livros.categoria_id = categorias.id
+WHERE categorias.nome = 'Ficção'
+  AND livros.taxa_diaria > 5.00
+  AND livros.disponivel = TRUE;
+
+
+-- Q5
+
+CREATE OR REPLACE VIEW vw_faturamento_por_categoria AS
+SELECT categorias.nome AS categoria,
+       SUM(itens_emprestimo.quantidade *
+           itens_emprestimo.valor_diaria) AS total_arrecadado
+FROM categorias
+JOIN livros ON livros.categoria_id = categorias.id
+JOIN itens_emprestimo ON itens_emprestimo.livro_id = livros.id
+JOIN emprestimos ON itens_emprestimo.emprestimo_id = emprestimos.id
+WHERE emprestimos.status = 'Devolvido'
+GROUP BY categorias.id, categorias.nome;
